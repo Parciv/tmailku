@@ -1,0 +1,29 @@
+name = "tmailku"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Ganti id di bawah dengan hasil `wrangler d1/kv/r2 create`
+[[d1_databases]]
+binding = "DB"
+database_name = "tmailku"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_YOUR_KV_ID"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "tmailku-attachments"
+
+[vars]
+APP_URL = "https://tmailku.example.com"
+WEB_ORIGIN = "https://tmailku.example.com"
+
+# Cron: poll IMAP + cleanup TTL setiap 2 menit
+[triggers]
+crons = ["*/2 * * * *"]
+
+# Secret (set via: wrangler secret put JWT_SECRET)
+#   JWT_SECRET   -> kunci tanda tangan session admin

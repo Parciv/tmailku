@@ -1,0 +1,16 @@
+{
+  "name": "tmailku",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Temporary mail multi-domain di Cloudflare Worker (dual-ingestion: Email Routing + IMAP)",
+  "workspaces": [
+    "worker",
+    "web"
+  ],
+  "scripts": {
+    "dev:worker": "npm --workspace worker run dev",
+    "dev:web": "npm --workspace web run dev",
+    "deploy:worker": "npm --workspace worker run deploy"
+  },
+  "license": "MIT"
+}
