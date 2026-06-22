@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	--color-primary: #6366f1;
+	--color-secondary: #22c55e;
+	--color-tertiary: #f59e0b;
+	--bg: #0b1020;
+	--card: rgba(255, 255, 255, 0.04);
+	--border: rgba(255, 255, 255, 0.08);
+}
+
+.light {
+	--bg: #f5f7fb;
+	--card: rgba(0, 0, 0, 0.02);
+	--border: rgba(0, 0, 0, 0.08);
+}
+
+html,
+body {
+	background: var(--bg);
+	color-scheme: dark;
+}
+
+body {
+	color: #e5e7eb;
+	background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.06) 1px, transparent 0);
+	background-size: 22px 22px;
+	min-height: 100vh;
+}
+
+.light body {
+	color: #1f2937;
+	background-image: radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.05) 1px, transparent 0);
+}
+
+.glass {
+	background: var(--card);
+	border: 1px solid var(--border);
+	backdrop-filter: blur(10px);
+	border-radius: 1rem;
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.55rem 0.9rem;
+	border-radius: 0.75rem;
+	font-weight: 600;
+	font-size: 0.875rem;
+	transition: opacity 0.15s, transform 0.05s;
+	border: 1px solid var(--border);
+}
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: var(--color-primary); color: white; border-color: transparent; }
+.btn-ghost { background: var(--card); }
+
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.25rem 0.6rem;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	border: 1px solid var(--border);
+	background: var(--card);
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+input, select, textarea {
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 0.6rem;
+	padding: 0.5rem 0.7rem;
+	color: inherit;
+	width: 100%;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-primary); }
