@@ -17,9 +17,17 @@ import { addLog } from './lib/log'
 const app = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 app.use('*', async (c, next) => {
-	const origin = c.env.WEB_ORIGIN || '*'
+	// WEB_ORIGIN bisa berisi beberapa origin dipisah koma, atau '*' untuk semua.
+	const allowed = (c.env.WEB_ORIGIN || '*')
+		.split(',')
+		.map((s) => s.trim().replace(/\/$/, ''))
+		.filter(Boolean)
 	return cors({
-		origin: (o) => (origin === '*' ? o : origin),
+		origin: (o) => {
+			if (allowed.includes('*')) return o
+			if (o && allowed.includes(o.replace(/\/$/, ''))) return o
+			return allowed[0] || ''
+		},
 		credentials: true,
 		allowHeaders: ['Content-Type', 'Authorization'],
 		allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
