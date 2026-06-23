@@ -58,6 +58,18 @@ publicRoutes.get('/domains', async (c) => {
 	return c.json({ domains: (results ?? []).map((r) => r.domain) })
 })
 
+// serve aset branding (logo/favicon) dari R2
+publicRoutes.get('/asset/:id', async (c) => {
+	const obj = await c.env.R2.get('brand/' + c.req.param('id'))
+	if (!obj) return c.json({ error: 'not found' }, 404)
+	return new Response(obj.body, {
+		headers: {
+			'content-type': obj.httpMetadata?.contentType || 'application/octet-stream',
+			'cache-control': 'public, max-age=86400',
+		},
+	})
+})
+
 publicRoutes.get('/address/:addr', async (c) => {
 	const addr = c.req.param('addr').toLowerCase()
 	const row = await c.env.DB.prepare('SELECT address, expires_at, created_at FROM addresses WHERE address = ?')

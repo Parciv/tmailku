@@ -14,11 +14,8 @@ brandingRoutes.get('/', async (c) => {
 		appName: out['app_name'] || 'TMailku',
 		logoUrl: out['logo_url'] || '',
 		faviconUrl: out['favicon_url'] || '',
-		colors: {
-			primary: out['color_primary'] || '#6366f1',
-			secondary: out['color_secondary'] || '#22c55e',
-			tertiary: out['color_tertiary'] || '#f59e0b',
-		},
+		heroTitle: out['hero_title'] || '',
+		heroSubtitle: out['hero_subtitle'] || '',
 		defaultTheme: out['default_theme'] || 'dark',
 		defaultLang: out['default_lang'] || 'id',
 		siteLocked: locked,
