@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
-import { Copy, RefreshCw, Trash2, Plus, Mail, ChevronDown, Check, ShieldCheck, Zap, Clock } from 'lucide-react'
+import { Copy, RefreshCw, Trash2, Plus, Mail, ChevronDown, Check, ShieldCheck, Zap, Clock, Pencil } from 'lucide-react'
 import { api, type EmailSummary, type Branding } from '@/lib/api'
 import { getAddresses, saveAddress, removeAddress, getActive, setActive, type SavedAddress } from '@/lib/store'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -16,6 +16,9 @@ export default function Home() {
 	const [copied, setCopied] = useState(false)
 	const [showSwitcher, setShowSwitcher] = useState(false)
 	const [loading, setLoading] = useState(false)
+	const [showCustom, setShowCustom] = useState(false)
+	const [customLocal, setCustomLocal] = useState('')
+	const [customDomain, setCustomDomain] = useState('')
 
 	const refresh = useCallback(async (addr: string) => {
 		if (!addr) return
@@ -28,7 +31,10 @@ export default function Home() {
 	useEffect(() => {
 		setAddresses(getAddresses())
 		setActiveAddr(getActive())
-		api.domains().then((d) => setDomains(d.domains)).catch(() => {})
+		api.domains().then((d) => {
+			setDomains(d.domains)
+			if (d.domains[0]) setCustomDomain(d.domains[0])
+		}).catch(() => {})
 	}, [])
 
 	useEffect(() => {
@@ -43,19 +49,27 @@ export default function Home() {
 		}
 	}, [active, refresh])
 
-	async function generate(domain?: string) {
+	async function generate(opts: { domain?: string; local?: string } = {}) {
 		setLoading(true)
 		try {
-			const r = await api.createAddress({ domain })
+			const r = await api.createAddress(opts)
 			const saved: SavedAddress = { address: r.address, ownerToken: r.ownerToken, expiresAt: r.expiresAt, domain: r.domain }
 			saveAddress(saved)
 			setAddresses(getAddresses())
 			setActiveAddr(r.address)
+			setShowCustom(false)
+			setCustomLocal('')
+			setShowSwitcher(false)
 		} catch (e: any) {
 			alert(e.message)
 		} finally {
 			setLoading(false)
 		}
+	}
+
+	function submitCustom() {
+		if (!customLocal) return
+		generate({ local: customLocal, domain: domains.length > 1 ? customDomain : domains[0] })
 	}
 
 	function copy() {
@@ -69,6 +83,8 @@ export default function Home() {
 		setOpen(full)
 		refresh(active)
 	}
+
+	const activeDomain = domains.length > 1 ? customDomain : (domains[0] || '')
 
 	return (
 		<main className="max-w-5xl mx-auto px-4 py-6">
@@ -98,44 +114,65 @@ export default function Home() {
 			{/* Kartu alamat + switcher multi-inbox */}
 			<div className="glass p-5 mb-6">
 				{active ? (
-					<>
-						<div className="flex items-center justify-between gap-3 flex-wrap">
-							<div className="relative">
-								<button className="btn btn-ghost mono text-base" onClick={() => setShowSwitcher((s) => !s)}>
-									{active} <ChevronDown size={14} />
-								</button>
-								{showSwitcher && (
-									<div className="glass absolute z-10 mt-1 p-2 min-w-[260px]">
-										{addresses.map((a) => (
-											<div key={a.address} className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-white/5">
-												<button className="mono text-sm text-left flex-1" onClick={() => { setActive(a.address); setActiveAddr(a.address); setShowSwitcher(false) }}>{a.address}</button>
-												<button onClick={() => { removeAddress(a.address); setAddresses(getAddresses()); setActiveAddr(getActive()) }}><Trash2 size={14} /></button>
-											</div>
-										))}
-										<button className="btn btn-ghost w-full mt-2" onClick={() => generate()}><Plus size={14} /> Alamat baru</button>
-									</div>
-								)}
-							</div>
-							<div className="grid grid-cols-2 gap-2">
-								<button className="btn btn-primary" onClick={copy}>{copied ? <Check size={16} /> : <Copy size={16} />} Copy</button>
-								<button className="btn btn-ghost" onClick={() => refresh(active)}><RefreshCw size={16} /> Refresh</button>
-								<button className="btn btn-ghost" onClick={() => generate()}><Plus size={16} /> Ganti</button>
-								<button className="btn btn-ghost" onClick={() => { removeAddress(active); setAddresses(getAddresses()); setActiveAddr(getActive()) }}><Trash2 size={16} /> Hapus</button>
-							</div>
+					<div className="flex items-center justify-between gap-3 flex-wrap">
+						<div className="relative min-w-0">
+							<button className="btn btn-ghost mono text-base max-w-full" onClick={() => setShowSwitcher((s) => !s)}>
+								<span className="truncate">{active}</span> <ChevronDown size={14} className="shrink-0" />
+							</button>
+							{showSwitcher && (
+								<div className="popover absolute z-30 mt-1 p-2 min-w-[280px] max-w-[90vw]">
+									{addresses.map((a) => (
+										<div key={a.address} className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-black/10 dark:hover:bg-white/10">
+											<button className="mono text-sm text-left flex-1 truncate" onClick={() => { setActive(a.address); setActiveAddr(a.address); setShowSwitcher(false) }}>{a.address}</button>
+											<button className="shrink-0 opacity-70 hover:opacity-100" onClick={() => { removeAddress(a.address); setAddresses(getAddresses()); setActiveAddr(getActive()) }}><Trash2 size={14} /></button>
+										</div>
+									))}
+									<button className="btn btn-ghost w-full mt-2" onClick={() => generate()}><Plus size={14} /> Alamat acak</button>
+									<button className="btn btn-ghost w-full mt-1" onClick={() => { setShowSwitcher(false); setShowCustom(true) }}><Pencil size={14} /> Custom email</button>
+								</div>
+							)}
 						</div>
-					</>
+						<div className="grid grid-cols-2 gap-2">
+							<button className="btn btn-primary" onClick={copy}>{copied ? <Check size={16} /> : <Copy size={16} />} Copy</button>
+							<button className="btn btn-ghost" onClick={() => refresh(active)}><RefreshCw size={16} /> Refresh</button>
+							<button className="btn btn-ghost" onClick={() => setShowCustom((s) => !s)}><Pencil size={16} /> Custom</button>
+							<button className="btn btn-ghost" onClick={() => { removeAddress(active); setAddresses(getAddresses()); setActiveAddr(getActive()) }}><Trash2 size={16} /> Hapus</button>
+						</div>
+					</div>
 				) : (
 					<div className="text-center">
-						<button className="btn btn-primary" disabled={loading} onClick={() => generate()}>
-							<Plus size={16} /> {loading ? 'Membuat...' : 'Buat Alamat'}
-						</button>
-						{domains.length > 1 && (
-							<div className="mt-3 flex gap-2 justify-center flex-wrap">
-								{domains.map((d) => (
-									<button key={d} className="pill" onClick={() => generate(d)}>@{d}</button>
-								))}
-							</div>
-						)}
+						<div className="flex gap-2 justify-center flex-wrap">
+							<button className="btn btn-primary" disabled={loading} onClick={() => generate()}>
+								<Plus size={16} /> {loading ? 'Membuat...' : 'Buat Alamat'}
+							</button>
+							<button className="btn btn-ghost" onClick={() => setShowCustom((s) => !s)}><Pencil size={16} /> Custom</button>
+						</div>
+					</div>
+				)}
+
+				{/* Form custom email */}
+				{showCustom && (
+					<div className="mt-4 pt-4" style={ { borderTop: '1px solid var(--border)' } }>
+						<label className="text-sm opacity-70 mb-2 block">Buat email custom</label>
+						<div className="flex gap-2 flex-wrap items-center">
+							<input
+								className="flex-1 min-w-[120px] mono"
+								placeholder="namaku"
+								value={customLocal}
+								onChange={(e) => setCustomLocal(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+								onKeyDown={(e) => { if (e.key === 'Enter') submitCustom() }}
+							/>
+							<span className="opacity-60">@</span>
+							{domains.length > 1 ? (
+								<select className="!w-auto mono" value={customDomain} onChange={(e) => setCustomDomain(e.target.value)}>
+									{domains.map((d) => <option key={d} value={d}>{d}</option>)}
+								</select>
+							) : (
+								<span className="mono opacity-80">{domains[0] || '...'}</span>
+							)}
+							<button className="btn btn-primary shrink-0" disabled={loading || !customLocal} onClick={submitCustom}>{loading ? '...' : 'Buat'}</button>
+						</div>
+						{customLocal && <div className="mono text-sm opacity-60 mt-2">{customLocal}@{activeDomain}</div>}
 					</div>
 				)}
 			</div>
@@ -144,7 +181,7 @@ export default function Home() {
 			<div className="glass p-5">
 				<div className="flex items-center justify-between mb-4">
 					<div className="flex items-center gap-2 font-semibold"><Mail size={18} /> Kotak Masuk <span className="pill">{emails.length}</span></div>
-					<span className="pill"><span className="w-2 h-2 rounded-full bg-secondary inline-block" /> Live</span>
+					<span className="pill"><span className="live-dot w-2 h-2 rounded-full bg-secondary inline-block" /> Live</span>
 				</div>
 				{emails.length === 0 ? (
 					<div className="text-center opacity-60 py-12"><Mail size={40} className="mx-auto mb-2" /> Kotak masuk kosong</div>
@@ -165,8 +202,8 @@ export default function Home() {
 
 			{/* Email viewer */}
 			{open && (
-				<div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-20" onClick={() => setOpen(null)}>
-					<div className="glass max-w-2xl w-full p-5 max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+				<div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40" onClick={() => setOpen(null)}>
+					<div className="popover max-w-2xl w-full p-5 max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
 						<div className="flex items-center justify-between mb-2">
 							<h3 className="font-bold">{open.subject || '(tanpa subjek)'}</h3>
 							<button className="btn btn-ghost" onClick={() => setOpen(null)}>Tutup</button>
