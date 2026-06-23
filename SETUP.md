@@ -72,7 +72,7 @@ Verifikasi tabel sudah jadi:
 ```bash
 npx wrangler d1 execute tmailku --remote --command "SELECT name FROM sqlite_master WHERE type='table'"
 ```
-Harus muncul: domains, addresses, emails, attachments, imap_accounts, admins, logs, settings, api_keys.
+Harus muncul: domains, addresses, emails, attachments, imap_settings, imap_accounts, admins, logs, settings, api_keys.
 
 ### 5. ⭐ Set JWT_SECRET (untuk login admin)
 
@@ -102,7 +102,7 @@ buat **Catch-all** → action **Send to a Worker** → pilih `tmailku`.
 ### ✅ Tes backend
 
 Buka di browser: `https://api.vdey.website/api/branding`
-- Muncul **JSON** (appName, colors, dst) → backend SEHAT. Lanjut ke Bagian B.
+- Muncul **JSON** (appName, logoUrl, faviconUrl, heroTitle, dst) → backend SEHAT. Lanjut ke Bagian B.
 - Masih error → tabel belum kebuat (ulang langkah 4) atau domain API belum kepasang (langkah 7).
 
 ---
@@ -151,7 +151,7 @@ Lalu pastikan `vdey.website` ada di `WEB_ORIGIN` (Bagian A langkah 3) → deploy
 Setelah backend & frontend hidup:
 1. Buka `https://<situs-kamu>/admin/login`.
 2. Kalau belum ada admin, kamu diarahkan ke **wizard setup** untuk bikin email + password admin pertama.
-3. Login → masuk dashboard → menu **Mail Sources** → tambah domain → menu lain sesuai kebutuhan.
+3. Login → masuk dashboard → menu **Mail Sources** → tambah domain → pilih IMAP Mailbox, Direct Routing, Hybrid, atau Configure Later sesuai kebutuhan.
 
 ---
 
