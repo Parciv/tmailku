@@ -115,9 +115,9 @@ export default function Home() {
 			<div className="glass p-5 mb-6">
 				{active ? (
 					<div className="flex items-center justify-between gap-3 flex-wrap">
-						<div className="relative min-w-0">
-							<button className="btn btn-ghost mono text-base max-w-full" onClick={() => setShowSwitcher((s) => !s)}>
-								<span className="truncate">{active}</span> <ChevronDown size={14} className="shrink-0" />
+						<div className="relative min-w-0 flex-1">
+							<button className="btn btn-ghost mono text-lg sm:text-xl font-semibold w-full justify-between" onClick={() => setShowSwitcher((s) => !s)}>
+								<span className="truncate">{active}</span> <ChevronDown size={18} className="shrink-0" />
 							</button>
 							{showSwitcher && (
 								<div className="popover absolute z-30 mt-1 p-2 min-w-[280px] max-w-[90vw]">
