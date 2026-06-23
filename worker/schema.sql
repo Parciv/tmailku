@@ -4,10 +4,17 @@
 CREATE TABLE IF NOT EXISTS domains (
   id TEXT PRIMARY KEY,
   domain TEXT UNIQUE NOT NULL,
-  source TEXT NOT NULL DEFAULT 'routing',   -- 'routing' | 'imap' | 'both'
-  status TEXT NOT NULL DEFAULT 'active',     -- 'active' | 'disabled'
-  verified INTEGER NOT NULL DEFAULT 0,       -- hasil cek MX/routing
-  created_at INTEGER NOT NULL
+  source TEXT NOT NULL DEFAULT 'routing',   -- legacy: 'routing' | 'imap' | 'both' | 'none'
+  status TEXT NOT NULL DEFAULT 'active',     -- legacy: 'active' | 'disabled'
+  verified INTEGER NOT NULL DEFAULT 0,       -- legacy mirror of is_verified
+  is_verified INTEGER NOT NULL DEFAULT 0,
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  receive_imap_enabled INTEGER NOT NULL DEFAULT 0,
+  receive_routing_enabled INTEGER NOT NULL DEFAULT 1,
+  routing_status TEXT NOT NULL DEFAULT 'waiting', -- 'waiting' | 'active' | 'disabled'
+  routing_last_email_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER
 );
 
 -- Alamat temporary yang aktif
@@ -53,17 +60,37 @@ CREATE TABLE IF NOT EXISTS attachments (
   r2_key TEXT
 );
 
--- Konfigurasi sumber IMAP eksternal
+-- Konfigurasi IMAP per-domain (domain-centric)
+CREATE TABLE IF NOT EXISTS imap_settings (
+  id TEXT PRIMARY KEY,
+  domain_id TEXT UNIQUE REFERENCES domains(id),
+  host TEXT NOT NULL,
+  port INTEGER NOT NULL DEFAULT 993,
+  encryption TEXT NOT NULL DEFAULT 'ssl',    -- 'ssl' | 'starttls' | 'none'
+  username TEXT NOT NULL,
+  password_encrypted TEXT NOT NULL,           -- plaintext sementara; gunakan App Password
+  folder TEXT NOT NULL DEFAULT 'INBOX',
+  polling_interval_minutes INTEGER NOT NULL DEFAULT 2,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_uid INTEGER NOT NULL DEFAULT 0,
+  last_sync_at INTEGER,
+  last_test_status TEXT,
+  last_error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER
+);
+
+-- Legacy table kept so older deployments can migrate safely. UI tidak lagi memakai section IMAP Accounts.
 CREATE TABLE IF NOT EXISTS imap_accounts (
   id TEXT PRIMARY KEY,
   label TEXT,
   hostname TEXT NOT NULL,
   port INTEGER NOT NULL DEFAULT 993,
-  encryption TEXT NOT NULL DEFAULT 'ssl',    -- 'ssl' | 'starttls' | 'none'
+  encryption TEXT NOT NULL DEFAULT 'ssl',
   username TEXT NOT NULL,
-  password TEXT NOT NULL,                     -- plaintext (gunakan App Password)
+  password TEXT NOT NULL,
   folder TEXT NOT NULL DEFAULT 'INBOX',
-  poll_interval INTEGER NOT NULL DEFAULT 120, -- detik
+  poll_interval INTEGER NOT NULL DEFAULT 120,
   domain_id TEXT REFERENCES domains(id),
   last_uid INTEGER NOT NULL DEFAULT 0,
   enabled INTEGER NOT NULL DEFAULT 1,
