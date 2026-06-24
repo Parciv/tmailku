@@ -1695,3 +1695,230 @@ function ApiKeys() {
         <div className="font-semibold mb-2">API Keys</div>
         <div className="flex gap-2 mb-2">
           <input
+            placeholder="Nama key"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              const r = await api.addApiKey({ name });
+              setCreated(r.plaintext);
+              setName("");
+              load();
+            }}
+          >
+            <Plus size={16} /> Buat
+          </button>
+        </div>
+        {created && (
+          <div className="glass p-2 text-sm mono break-all mb-2">
+            Simpan sekarang (hanya tampil sekali):
+            <br />
+            {created}
+          </div>
+        )}
+        {keys.map((k) => (
+          <div
+            key={k.id}
+            className="flex items-center justify-between py-2 border-t border-white/5"
+          >
+            <span>
+              {k.name} <span className="pill mono ml-2">{k.key_prefix}…</span>{" "}
+              {k.enabled ? "" : <span className="pill text-red-400">off</span>}
+            </span>
+            <div className="flex gap-2">
+              <button
+                className="btn btn-ghost"
+                onClick={async () => {
+                  await api.patchApiKey(k.id, { enabled: !k.enabled });
+                  load();
+                }}
+              >
+                {k.enabled ? "Disable" : "Enable"}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={async () => {
+                  await api.delApiKey(k.id);
+                  load();
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+        <a
+          className="btn btn-ghost mt-3"
+          href={(process.env.NEXT_PUBLIC_API_BASE || "") + "/docs"}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Lihat Dokumentasi API
+        </a>
+      </Card>
+    </div>
+  );
+}
+
+function Integrations() {
+  const [s, setS] = useState<Record<string, string>>({});
+  useEffect(() => {
+    api
+      .integrations()
+      .then((r) => setS(flat(r.settings)))
+      .catch(() => {});
+  }, []);
+  const set = (k: string, v: string) => setS({ ...s, [k]: v });
+  return (
+    <Card>
+      <div className="space-y-3">
+        <div className="font-semibold">Telegram Bot</div>
+        <Field label="Bot Token">
+          <input
+            value={s.telegram_bot_token || ""}
+            onChange={(e) => set("telegram_bot_token", e.target.value)}
+          />
+        </Field>
+        <Field label="Chat ID">
+          <input
+            value={s.telegram_chat_id || ""}
+            onChange={(e) => set("telegram_chat_id", e.target.value)}
+          />
+        </Field>
+        <div className="font-semibold pt-2">Webhook</div>
+        <Field label="Aktifkan Webhook">
+          <select
+            value={s.webhook_enabled || "false"}
+            onChange={(e) => set("webhook_enabled", e.target.value)}
+          >
+            <option value="true">Aktif</option>
+            <option value="false">Nonaktif</option>
+          </select>
+        </Field>
+        <Field label="Webhook URL">
+          <input
+            value={s.webhook_url || ""}
+            onChange={(e) => set("webhook_url", e.target.value)}
+          />
+        </Field>
+        <div className="flex gap-2">
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              await api.saveIntegrations(s);
+              alert("Tersimpan");
+            }}
+          >
+            Simpan
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={async () => {
+              const r = await api.testIntegration();
+              alert(
+                "Telegram: " +
+                  (r.telegram ? "OK" : "-") +
+                  " | Webhook: " +
+                  (r.webhook ? "OK" : "-"),
+              );
+            }}
+          >
+            <Send size={14} /> Tes Notifikasi
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SystemTab() {
+  const [s, setS] = useState<Record<string, string>>({});
+  useEffect(() => {
+    api
+      .settings("system")
+      .then((r) => setS(flat(r.settings)))
+      .catch(() => {});
+  }, []);
+  const set = (k: string, v: string) => setS({ ...s, [k]: v });
+  return (
+    <Card>
+      <p className="text-xs opacity-60 mb-3">
+        Pengaturan teknis: masa berlaku alamat, batas ukuran lampiran, rate
+        limit, dan format alamat.
+      </p>
+      <div className="space-y-3">
+        <Field label="TTL alamat (menit)">
+          <input
+            type="number"
+            value={s.ttl_minutes || "60"}
+            onChange={(e) => set("ttl_minutes", e.target.value)}
+          />
+        </Field>
+        <Field label="Maks lampiran (MB)">
+          <input
+            type="number"
+            value={s.max_attachment_mb || "10"}
+            onChange={(e) => set("max_attachment_mb", e.target.value)}
+          />
+        </Field>
+        <Field label="Rate limit global (/menit)">
+          <input
+            type="number"
+            value={s.global_rate_limit || "120"}
+            onChange={(e) => set("global_rate_limit", e.target.value)}
+          />
+        </Field>
+        <Field label="Format alamat">
+          <select
+            value={s.address_format || "word+num"}
+            onChange={(e) => set("address_format", e.target.value)}
+          >
+            <option value="word+num">kata+angka</option>
+            <option value="random">acak</option>
+          </select>
+        </Field>
+        <Field label="Blocklist pengirim (pisahkan koma)">
+          <input
+            value={s.blocklist_senders || ""}
+            onChange={(e) => set("blocklist_senders", e.target.value)}
+          />
+        </Field>
+        <button
+          className="btn btn-primary"
+          onClick={async () => {
+            await api.saveSettings(s);
+            alert("Tersimpan");
+          }}
+        >
+          Simpan
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="text-sm opacity-70">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function flat(settings: any): Record<string, string> {
+  if (Array.isArray(settings)) {
+    const o: Record<string, string> = {};
+    for (const r of settings) o[r.key] = r.value ?? "";
+    return o;
+  }
+  return settings || {};
+}
