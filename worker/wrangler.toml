@@ -7,19 +7,19 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "tmailku"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "cba009a6-f05a-45f7-a131-33e1ece1f1ab"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_YOUR_KV_ID"
+id = "2d4d458270654ed1927dae982e1f6428"
 
 [[r2_buckets]]
 binding = "R2"
 bucket_name = "tmailku-attachments"
 
 [vars]
-APP_URL = "https://tmailku.example.com"
-WEB_ORIGIN = "https://tmailku.example.com"
+APP_URL = "https://stardue.site"
+WEB_ORIGIN = "https://stardue.site"
 
 # Cron: poll IMAP + cleanup TTL setiap 2 menit
 [triggers]
