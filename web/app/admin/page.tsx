@@ -271,16 +271,23 @@ function MailSources() {
     polling_interval_minutes: 2,
   };
   const [domains, setDomains] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [view, setView] = useState<"domains" | "profiles">("domains");
   const [routingEndpoint, setRoutingEndpoint] = useState("");
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<any | null>(null);
   const [newDomain, setNewDomain] = useState("");
   const [newImapEnabled, setNewImapEnabled] = useState(false);
   const [newRoutingEnabled, setNewRoutingEnabled] = useState(false);
-  const [newImap, setNewImap] = useState<any>(emptyImap);
-  const [newTest, setNewTest] = useState<any>(null);
-  const [showNewPass, setShowNewPass] = useState(false);
+  const [newImapPayload, setNewImapPayload] = useState<any>(emptyImap);
+  const [newImapOk, setNewImapOk] = useState(false);
   const [busy, setBusy] = useState("");
+
+  const loadProfiles = () =>
+    api
+      .imapProfiles()
+      .then((r: any) => setProfiles(r.profiles || []))
+      .catch(() => {});
 
   const load = () => {
     api
@@ -296,25 +303,16 @@ function MailSources() {
       })
       .catch(() => {});
   };
-  useEffect(load, []);
-
-  async function testNewImap() {
-    setBusy("test-new");
-    try {
-      const r = await api.testNewDomainImap(newImap);
-      setNewTest(r);
-    } catch (e: any) {
-      setNewTest({ ok: false, error: e.message });
-    } finally {
-      setBusy("");
-    }
-  }
+  useEffect(() => {
+    load();
+    loadProfiles();
+  }, []);
 
   async function addDomain() {
     if (!newDomain.trim()) return alert("Domain wajib diisi");
-    if (newImapEnabled && !newTest?.ok)
+    if (newImapEnabled && !newImapOk)
       return alert(
-        "Test Connection IMAP dulu sampai berhasil sebelum Add Domain",
+        "Test Connection IMAP (atau pilih profile) dulu sebelum Add Domain",
       );
     setBusy("add");
     try {
@@ -322,13 +320,13 @@ function MailSources() {
         domain: newDomain,
         receive_imap_enabled: newImapEnabled,
         receive_routing_enabled: newRoutingEnabled,
-        imap: newImap,
+        imap: newImapPayload,
       });
       setNewDomain("");
       setNewImapEnabled(false);
       setNewRoutingEnabled(false);
-      setNewImap(emptyImap);
-      setNewTest(null);
+      setNewImapPayload(emptyImap);
+      setNewImapOk(false);
       setAdding(false);
       load();
     } catch (e: any) {
@@ -343,13 +341,44 @@ function MailSources() {
       <DomainEditor
         domain={selected}
         routingEndpoint={routingEndpoint}
+        profiles={profiles}
+        reloadProfiles={loadProfiles}
         onBack={() => setSelected(null)}
         onReload={load}
       />
     );
 
+  const tabBar = (
+    <div className="flex gap-2 mb-2">
+      <button
+        className={"btn " + (view === "domains" ? "btn-primary" : "btn-ghost")}
+        onClick={() => setView("domains")}
+      >
+        Domains
+      </button>
+      <button
+        className={"btn " + (view === "profiles" ? "btn-primary" : "btn-ghost")}
+        onClick={() => {
+          setView("profiles");
+          loadProfiles();
+        }}
+      >
+        IMAP Profiles
+      </button>
+    </div>
+  );
+
+  if (view === "profiles")
+    return (
+      <div className="space-y-4">
+        {tabBar}
+        <ImapProfilesPage profiles={profiles} reload={loadProfiles} />
+      </div>
+    );
+
   return (
     <div className="space-y-4">
+      {tabBar}
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2 font-semibold text-lg">
@@ -388,10 +417,7 @@ function MailSources() {
                   className="!w-auto"
                   type="checkbox"
                   checked={newImapEnabled}
-                  onChange={(e) => {
-                    setNewImapEnabled(e.target.checked);
-                    setNewTest(null);
-                  }}
+                  onChange={(e) => setNewImapEnabled(e.target.checked)}
                 />{" "}
                 IMAP Mailbox
               </label>
@@ -407,28 +433,14 @@ function MailSources() {
             </div>
 
             {newImapEnabled && (
-              <div className="glass p-3 space-y-3">
-                <div className="font-semibold">IMAP Configuration</div>
-                <ImapForm
-                  value={newImap}
-                  onChange={(v) => {
-                    setNewImap(v);
-                    setNewTest(null);
-                  }}
-                  showPass={showNewPass}
-                  setShowPass={setShowNewPass}
-                />
-                <div className="flex gap-2 items-center flex-wrap">
-                  <button
-                    className="btn btn-ghost"
-                    onClick={testNewImap}
-                    disabled={busy === "test-new"}
-                  >
-                    {busy === "test-new" ? "Testing..." : "Test Connection"}
-                  </button>
-                  <ImapTestResult result={newTest} />
-                </div>
-              </div>
+              <ImapSourceConfig
+                profiles={profiles}
+                reloadProfiles={loadProfiles}
+                onChange={(payload, ok) => {
+                  setNewImapPayload(payload);
+                  setNewImapOk(ok);
+                }}
+              />
             )}
 
             {newRoutingEnabled && (
@@ -502,11 +514,15 @@ function MailSources() {
 function DomainEditor({
   domain,
   routingEndpoint,
+  profiles,
+  reloadProfiles,
   onBack,
   onReload,
 }: {
   domain: any;
   routingEndpoint: string;
+  profiles: any[];
+  reloadProfiles: () => void;
   onBack: () => void;
   onReload: () => void;
 }) {
@@ -516,23 +532,18 @@ function DomainEditor({
   const [routingEnabled, setRoutingEnabled] = useState(
     !!domain.receive_routing_enabled,
   );
-  const [imap, setImap] = useState<any>({
-    host: domain.imap?.host || "",
-    port: domain.imap?.port || 993,
-    encryption: domain.imap?.encryption || "ssl",
-    username: domain.imap?.username || "",
-    password: "",
-    folder: domain.imap?.folder || "INBOX",
-    polling_interval_minutes: domain.imap?.polling_interval_minutes || 2,
-  });
-  const [showPass, setShowPass] = useState(false);
-  const [test, setTest] = useState<any>(
-    domain.imap?.last_test_status
-      ? {
-          ok: domain.imap.last_test_status === "success",
-          error: domain.imap.last_error,
-        }
-      : null,
+  const [imapPayload, setImapPayload] = useState<any>(
+    domain.imap?.profile_id
+      ? { profile_id: domain.imap.profile_id }
+      : {
+          host: domain.imap?.host || "",
+          port: domain.imap?.port || 993,
+          encryption: domain.imap?.encryption || "ssl",
+          username: domain.imap?.username || "",
+          password: "",
+          folder: domain.imap?.folder || "INBOX",
+          polling_interval_minutes: domain.imap?.polling_interval_minutes || 2,
+        },
   );
   const [busy, setBusy] = useState("");
   const liveDomain = { ...domain, is_enabled: enabled };
@@ -569,24 +580,12 @@ function DomainEditor({
         is_enabled: enabled,
         receive_imap_enabled: imapEnabled,
         receive_routing_enabled: routingEnabled,
-        imap,
+        imap: imapPayload,
       });
       await onReload();
       alert("Tersimpan");
     } catch (e: any) {
       alert(e.message);
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function testImap() {
-    setBusy("test");
-    try {
-      const r = await api.testDomainImap(domain.id, imap);
-      setTest(r);
-    } catch (e: any) {
-      setTest({ ok: false, error: e.message });
     } finally {
       setBusy("");
     }
@@ -697,21 +696,14 @@ function DomainEditor({
 
       {imapEnabled && (
         <Card>
-          <div className="font-semibold mb-3">IMAP Configuration</div>
-          <ImapForm
-            value={imap}
-            onChange={setImap}
-            showPass={showPass}
-            setShowPass={setShowPass}
+          <ImapSourceConfig
+            profiles={profiles}
+            reloadProfiles={reloadProfiles}
+            domainId={domain.id}
+            initial={domain.imap}
+            onChange={(payload) => setImapPayload(payload)}
           />
           <div className="flex gap-2 items-center flex-wrap mt-3">
-            <button
-              className="btn btn-ghost"
-              onClick={testImap}
-              disabled={busy === "test"}
-            >
-              {busy === "test" ? "Testing..." : "Test Connection"}
-            </button>
             <button
               className="btn btn-ghost"
               onClick={syncNow}
@@ -720,7 +712,6 @@ function DomainEditor({
               <RefreshCw size={14} />{" "}
               {busy === "sync" ? "Syncing..." : "Sync Now"}
             </button>
-            <ImapTestResult result={test} />
           </div>
         </Card>
       )}
@@ -772,6 +763,524 @@ function DomainEditor({
           <Trash2 size={14} /> Delete Domain
         </button>
       </Card>
+    </div>
+  );
+}
+
+function ImapSourceConfig({
+  profiles,
+  reloadProfiles,
+  domainId,
+  initial,
+  onChange,
+}: {
+  profiles: any[];
+  reloadProfiles: () => void;
+  domainId?: string;
+  initial?: any;
+  onChange: (payload: any, testedOk: boolean) => void;
+}) {
+  const [mode, setMode] = useState<"custom" | "profile">(
+    initial?.profile_id ? "profile" : "custom",
+  );
+  const [profileId, setProfileId] = useState<string>(initial?.profile_id || "");
+  const [profileName, setProfileName] = useState("");
+  const [imap, setImap] = useState<any>({
+    host: initial?.host || "",
+    port: initial?.port || 993,
+    encryption: initial?.encryption || "ssl",
+    username: initial?.username || "",
+    password: "",
+    folder: initial?.folder || "INBOX",
+    polling_interval_minutes: initial?.polling_interval_minutes || 2,
+  });
+  const [showPass, setShowPass] = useState(false);
+  const [test, setTest] = useState<any>(null);
+  const [busy, setBusy] = useState("");
+  const [smart, setSmart] = useState<any>(null);
+  const [askSave, setAskSave] = useState(false);
+  const [saveName, setSaveName] = useState("");
+
+  useEffect(() => {
+    const payload = mode === "profile" ? { profile_id: profileId } : imap;
+    const ok = mode === "profile" ? !!profileId : !!test?.ok;
+    onChange(payload, ok);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, profileId, imap, test]);
+
+  useEffect(() => {
+    if (mode !== "custom") {
+      setSmart(null);
+      return;
+    }
+    const h = (imap.host || "").trim();
+    const u = (imap.username || "").trim();
+    if (!h || !u) {
+      setSmart(null);
+      return;
+    }
+    let active = true;
+    const t = setTimeout(() => {
+      api
+        .checkImapProfile({ host: h, username: u })
+        .then((r: any) => {
+          if (active) setSmart(r.match || null);
+        })
+        .catch(() => {});
+    }, 600);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imap.host, imap.username, mode]);
+
+  async function runTest() {
+    setBusy("test");
+    setTest(null);
+    try {
+      let r: any;
+      if (mode === "profile") {
+        if (!profileId) {
+          setTest({ ok: false, error: "Pilih profile dulu" });
+          return;
+        }
+        r = await api.testImapProfile(profileId);
+      } else if (domainId) {
+        r = await api.testDomainImap(domainId, imap);
+      } else {
+        r = await api.testNewDomainImap(imap);
+      }
+      setTest(r);
+      if (r.ok && mode === "custom") {
+        setSaveName(profileName || "");
+        setAskSave(true);
+      }
+    } catch (e: any) {
+      setTest({ ok: false, error: e.message });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function doSaveProfile() {
+    if (!saveName.trim()) return alert("Isi nama profile");
+    setBusy("save-profile");
+    try {
+      const { id } = await api.addImapProfile({ name: saveName.trim(), imap });
+      await reloadProfiles();
+      setAskSave(false);
+      setMode("profile");
+      setProfileId(id);
+      alert("Profile tersimpan & dipakai");
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function useProfile(id: string) {
+    setMode("profile");
+    setProfileId(id);
+    setSmart(null);
+    setTest(null);
+  }
+
+  return (
+    <div className="glass p-3 space-y-3">
+      <div className="font-semibold">IMAP Configuration</div>
+      <div>
+        <div className="text-sm opacity-70 mb-2">IMAP Source</div>
+        <label className="flex items-center gap-2 mb-1">
+          <input
+            className="!w-auto"
+            type="radio"
+            checked={mode === "custom"}
+            onChange={() => {
+              setMode("custom");
+              setTest(null);
+            }}
+          />{" "}
+          Custom Configuration
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            className="!w-auto"
+            type="radio"
+            checked={mode === "profile"}
+            disabled={profiles.length === 0}
+            onChange={() => {
+              setMode("profile");
+              setTest(null);
+            }}
+          />{" "}
+          Use Existing Profile
+          {profiles.length === 0 && (
+            <span className="opacity-50 text-xs">(belum ada profile)</span>
+          )}
+        </label>
+      </div>
+
+      {mode === "custom" && (
+        <>
+          <Field label="Profile Name (Optional)">
+            <input
+              placeholder="mis. Havito Main Mailbox"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+            />
+          </Field>
+          <ImapForm
+            value={imap}
+            onChange={(v) => {
+              setImap(v);
+              setTest(null);
+            }}
+            showPass={showPass}
+            setShowPass={setShowPass}
+          />
+          {smart && (
+            <div className="glass p-3">
+              <div className="font-semibold">⚡ Similar profile detected</div>
+              <div className="mono text-sm">{smart.name}</div>
+              <div className="text-sm opacity-70 mb-2">
+                This profile already exists.
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => useProfile(smart.id)}
+                >
+                  Use Existing Profile
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setSmart(null)}
+                >
+                  Create Anyway
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === "profile" && (
+        <Field label="Profile">
+          <select
+            value={profileId}
+            onChange={(e) => {
+              setProfileId(e.target.value);
+              setTest(null);
+            }}
+          >
+            <option value="">— pilih profile —</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · {p.host}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+
+      <div className="flex gap-2 items-center flex-wrap">
+        <button
+          className="btn btn-ghost"
+          onClick={runTest}
+          disabled={busy === "test"}
+        >
+          {busy === "test" ? "Testing..." : "Test Connection"}
+        </button>
+        <ImapTestResult result={test} />
+      </div>
+
+      {askSave && mode === "custom" && (
+        <div className="glass p-3">
+          <div className="text-sm mb-2">
+            🟢 Connection successful
+            <br />
+            Save this configuration as reusable profile?
+          </div>
+          <Field label="Profile Name">
+            <input
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="Havito Main Mailbox"
+            />
+          </Field>
+          <div className="flex gap-2 mt-2">
+            <button className="btn btn-ghost" onClick={() => setAskSave(false)}>
+              No Thanks
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={doSaveProfile}
+              disabled={busy === "save-profile"}
+            >
+              {busy === "save-profile" ? "Saving..." : "Save as Profile"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImapProfilesPage({
+  profiles,
+  reload,
+}: {
+  profiles: any[];
+  reload: () => void;
+}) {
+  const [editing, setEditing] = useState<any | null>(null);
+  const [creating, setCreating] = useState(false);
+  if (editing)
+    return (
+      <ProfileEditor
+        profile={editing}
+        reload={reload}
+        onBack={() => {
+          setEditing(null);
+          reload();
+        }}
+      />
+    );
+  if (creating)
+    return (
+      <ProfileEditor
+        profile={null}
+        reload={reload}
+        onBack={() => {
+          setCreating(false);
+          reload();
+        }}
+      />
+    );
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="font-semibold text-lg">IMAP Profiles</div>
+          <p className="text-sm opacity-60">
+            Konfigurasi IMAP yang bisa dipakai ulang oleh banyak domain.
+          </p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setCreating(true)}>
+          <Plus size={16} /> New Profile
+        </button>
+      </div>
+      <div className="grid md:grid-cols-2 gap-3">
+        {profiles.map((p) => (
+          <div key={p.id} className="glass p-4">
+            <div className="mono font-semibold truncate">{p.name}</div>
+            <div className="text-sm opacity-70 mono truncate">{p.host}</div>
+            <div className="text-sm opacity-70 mt-1">
+              Used by {p.used_by} domain{p.used_by === 1 ? "" : "s"}
+            </div>
+            <button
+              className="btn btn-ghost mt-2"
+              onClick={() => setEditing(p)}
+            >
+              Edit
+            </button>
+          </div>
+        ))}
+        {profiles.length === 0 && (
+          <Card>
+            <div className="opacity-60 text-sm">
+              Belum ada profile. Klik New Profile, atau simpan dari konfigurasi
+              IMAP domain.
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProfileEditor({
+  profile,
+  onBack,
+  reload,
+}: {
+  profile: any | null;
+  onBack: () => void;
+  reload: () => void;
+}) {
+  const isNew = !profile;
+  const [name, setName] = useState(profile?.name || "");
+  const [imap, setImap] = useState<any>({
+    host: profile?.host || "",
+    port: profile?.port || 993,
+    encryption: profile?.encryption || "ssl",
+    username: profile?.username || "",
+    password: "",
+    folder: profile?.folder || "INBOX",
+    polling_interval_minutes: profile?.polling_interval_minutes || 2,
+  });
+  const [showPass, setShowPass] = useState(false);
+  const [test, setTest] = useState<any>(null);
+  const [busy, setBusy] = useState("");
+  const usedBy = profile?.used_by || 0;
+  const domains: string[] = profile?.domains || [];
+
+  async function runTest() {
+    setBusy("test");
+    setTest(null);
+    try {
+      let r: any;
+      if (!isNew && (!imap.host || !imap.username || !imap.password)) {
+        r = await api.testImapProfile(profile.id);
+      } else {
+        r = await api.testNewDomainImap(imap);
+      }
+      setTest(r);
+    } catch (e: any) {
+      setTest({ ok: false, error: e.message });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function save() {
+    if (!name.trim()) return alert("Nama profile wajib");
+    if (isNew && (!imap.host || !imap.username || !imap.password))
+      return alert("Host, username, dan password wajib");
+    if (
+      !isNew &&
+      usedBy > 0 &&
+      !confirm(
+        "This profile is currently used by " +
+          usedBy +
+          " domains.\nChanges will affect all linked domains.\n\nLanjutkan?",
+      )
+    )
+      return;
+    setBusy("save");
+    try {
+      if (isNew) await api.addImapProfile({ name, imap });
+      else await api.patchImapProfile(profile.id, { name, imap });
+      reload();
+      onBack();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function del() {
+    if (usedBy > 0) {
+      alert(
+        "Cannot delete profile.\nThis profile is currently linked to " +
+          usedBy +
+          " domains.\nRemove all linked domains first.",
+      );
+      return;
+    }
+    if (!confirm("Delete profile " + profile.name + "?")) return;
+    try {
+      await api.delImapProfile(profile.id);
+      reload();
+      onBack();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <button className="btn btn-ghost" onClick={onBack}>
+        ← Back to IMAP Profiles
+      </button>
+      <h2 className="text-2xl font-bold">
+        {isNew ? "New IMAP Profile" : profile.name}
+      </h2>
+      {!isNew && usedBy > 0 && (
+        <div className="glass p-3 text-sm">
+          ⚠ This profile is currently used by {usedBy} domains. Changes will
+          affect all linked domains.
+        </div>
+      )}
+      <Card>
+        <Field label="Profile Name">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Havito Main Mailbox"
+          />
+        </Field>
+        <div className="mt-3">
+          <ImapForm
+            value={imap}
+            onChange={(v) => {
+              setImap(v);
+              setTest(null);
+            }}
+            showPass={showPass}
+            setShowPass={setShowPass}
+          />
+        </div>
+        {!isNew && (
+          <p className="text-xs opacity-50 mt-2">
+            Kosongkan password untuk mempertahankan password lama.
+          </p>
+        )}
+        <div className="flex gap-2 items-center flex-wrap mt-3">
+          <button
+            className="btn btn-ghost"
+            onClick={runTest}
+            disabled={busy === "test"}
+          >
+            {busy === "test" ? "Testing..." : "Test Connection"}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={save}
+            disabled={busy === "save"}
+          >
+            {busy === "save" ? "Saving..." : "Save Changes"}
+          </button>
+          <ImapTestResult result={test} />
+        </div>
+      </Card>
+
+      {!isNew && (
+        <Card>
+          <div className="font-semibold mb-2">Domains Using This Profile</div>
+          {domains.length === 0 ? (
+            <div className="opacity-60 text-sm">
+              Belum dipakai domain manapun.
+            </div>
+          ) : (
+            <ul className="text-sm space-y-1">
+              {domains.map((d) => (
+                <li key={d} className="mono">
+                  • {d}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="text-sm opacity-70 mt-2">
+            Total: {usedBy} Domain{usedBy === 1 ? "" : "s"}
+          </div>
+        </Card>
+      )}
+
+      {!isNew && (
+        <Card>
+          <div className="font-semibold text-red-400 mb-2">Delete Profile</div>
+          <p className="text-sm opacity-70 mb-3">
+            Profile hanya dapat dihapus jika tidak digunakan domain manapun.
+          </p>
+          <button className="btn btn-ghost text-red-400" onClick={del}>
+            <Trash2 size={14} /> Delete Profile
+          </button>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1186,230 +1695,3 @@ function ApiKeys() {
         <div className="font-semibold mb-2">API Keys</div>
         <div className="flex gap-2 mb-2">
           <input
-            placeholder="Nama key"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <button
-            className="btn btn-primary"
-            onClick={async () => {
-              const r = await api.addApiKey({ name });
-              setCreated(r.plaintext);
-              setName("");
-              load();
-            }}
-          >
-            <Plus size={16} /> Buat
-          </button>
-        </div>
-        {created && (
-          <div className="glass p-2 text-sm mono break-all mb-2">
-            Simpan sekarang (hanya tampil sekali):
-            <br />
-            {created}
-          </div>
-        )}
-        {keys.map((k) => (
-          <div
-            key={k.id}
-            className="flex items-center justify-between py-2 border-t border-white/5"
-          >
-            <span>
-              {k.name} <span className="pill mono ml-2">{k.key_prefix}…</span>{" "}
-              {k.enabled ? "" : <span className="pill text-red-400">off</span>}
-            </span>
-            <div className="flex gap-2">
-              <button
-                className="btn btn-ghost"
-                onClick={async () => {
-                  await api.patchApiKey(k.id, { enabled: !k.enabled });
-                  load();
-                }}
-              >
-                {k.enabled ? "Disable" : "Enable"}
-              </button>
-              <button
-                className="btn btn-ghost"
-                onClick={async () => {
-                  await api.delApiKey(k.id);
-                  load();
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
-        <a
-          className="btn btn-ghost mt-3"
-          href={(process.env.NEXT_PUBLIC_API_BASE || "") + "/docs"}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Lihat Dokumentasi API
-        </a>
-      </Card>
-    </div>
-  );
-}
-
-function Integrations() {
-  const [s, setS] = useState<Record<string, string>>({});
-  useEffect(() => {
-    api
-      .integrations()
-      .then((r) => setS(flat(r.settings)))
-      .catch(() => {});
-  }, []);
-  const set = (k: string, v: string) => setS({ ...s, [k]: v });
-  return (
-    <Card>
-      <div className="space-y-3">
-        <div className="font-semibold">Telegram Bot</div>
-        <Field label="Bot Token">
-          <input
-            value={s.telegram_bot_token || ""}
-            onChange={(e) => set("telegram_bot_token", e.target.value)}
-          />
-        </Field>
-        <Field label="Chat ID">
-          <input
-            value={s.telegram_chat_id || ""}
-            onChange={(e) => set("telegram_chat_id", e.target.value)}
-          />
-        </Field>
-        <div className="font-semibold pt-2">Webhook</div>
-        <Field label="Aktifkan Webhook">
-          <select
-            value={s.webhook_enabled || "false"}
-            onChange={(e) => set("webhook_enabled", e.target.value)}
-          >
-            <option value="true">Aktif</option>
-            <option value="false">Nonaktif</option>
-          </select>
-        </Field>
-        <Field label="Webhook URL">
-          <input
-            value={s.webhook_url || ""}
-            onChange={(e) => set("webhook_url", e.target.value)}
-          />
-        </Field>
-        <div className="flex gap-2">
-          <button
-            className="btn btn-primary"
-            onClick={async () => {
-              await api.saveIntegrations(s);
-              alert("Tersimpan");
-            }}
-          >
-            Simpan
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={async () => {
-              const r = await api.testIntegration();
-              alert(
-                "Telegram: " +
-                  (r.telegram ? "OK" : "-") +
-                  " | Webhook: " +
-                  (r.webhook ? "OK" : "-"),
-              );
-            }}
-          >
-            <Send size={14} /> Tes Notifikasi
-          </button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function SystemTab() {
-  const [s, setS] = useState<Record<string, string>>({});
-  useEffect(() => {
-    api
-      .settings("system")
-      .then((r) => setS(flat(r.settings)))
-      .catch(() => {});
-  }, []);
-  const set = (k: string, v: string) => setS({ ...s, [k]: v });
-  return (
-    <Card>
-      <p className="text-xs opacity-60 mb-3">
-        Pengaturan teknis: masa berlaku alamat, batas ukuran lampiran, rate
-        limit, dan format alamat.
-      </p>
-      <div className="space-y-3">
-        <Field label="TTL alamat (menit)">
-          <input
-            type="number"
-            value={s.ttl_minutes || "60"}
-            onChange={(e) => set("ttl_minutes", e.target.value)}
-          />
-        </Field>
-        <Field label="Maks lampiran (MB)">
-          <input
-            type="number"
-            value={s.max_attachment_mb || "10"}
-            onChange={(e) => set("max_attachment_mb", e.target.value)}
-          />
-        </Field>
-        <Field label="Rate limit global (/menit)">
-          <input
-            type="number"
-            value={s.global_rate_limit || "120"}
-            onChange={(e) => set("global_rate_limit", e.target.value)}
-          />
-        </Field>
-        <Field label="Format alamat">
-          <select
-            value={s.address_format || "word+num"}
-            onChange={(e) => set("address_format", e.target.value)}
-          >
-            <option value="word+num">kata+angka</option>
-            <option value="random">acak</option>
-          </select>
-        </Field>
-        <Field label="Blocklist pengirim (pisahkan koma)">
-          <input
-            value={s.blocklist_senders || ""}
-            onChange={(e) => set("blocklist_senders", e.target.value)}
-          />
-        </Field>
-        <button
-          className="btn btn-primary"
-          onClick={async () => {
-            await api.saveSettings(s);
-            alert("Tersimpan");
-          }}
-        >
-          Simpan
-        </button>
-      </div>
-    </Card>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="text-sm opacity-70">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function flat(settings: any): Record<string, string> {
-  if (Array.isArray(settings)) {
-    const o: Record<string, string> = {};
-    for (const r of settings) o[r.key] = r.value ?? "";
-    return o;
-  }
-  return settings || {};
-}

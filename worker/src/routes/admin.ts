@@ -159,8 +159,55 @@ const pollingMinutes = (v: any) => {
   return [2, 5, 10, 15].includes(n) ? n : 2;
 };
 
+// Resolve field koneksi IMAP efektif: dari reusable profile (imap.profile_id) atau custom config.
+async function resolveImapFields(env: Env, imap: any) {
+  if (imap?.profile_id) {
+    const p = await env.DB.prepare("SELECT * FROM imap_profiles WHERE id = ?")
+      .bind(imap.profile_id)
+      .first<any>();
+    if (!p) return null;
+    return {
+      profile_id: p.id,
+      host: p.host,
+      port: Number(p.port || 993),
+      encryption: p.encryption || "ssl",
+      password: p.password_encrypted,
+      username: p.username,
+      folder: p.folder || "INBOX",
+      polling_interval_minutes: pollingMinutes(p.polling_interval_minutes),
+    };
+  }
+  if (!imap?.host || !imap?.username || !imap?.password) return null;
+  return {
+    profile_id: null,
+    host: imap.host,
+    port: Number(imap.port || 993),
+    encryption: imap.encryption || "ssl",
+    username: imap.username,
+    password: imap.password,
+    folder: imap.folder || "INBOX",
+    polling_interval_minutes: pollingMinutes(imap.polling_interval_minutes),
+  };
+}
+
 async function ensureMailSourceSchema(env: Env) {
   const stmts = [
+    `CREATE TABLE IF NOT EXISTS imap_profiles (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			host TEXT NOT NULL,
+			port INTEGER NOT NULL DEFAULT 993,
+			encryption TEXT NOT NULL DEFAULT 'ssl',
+			username TEXT NOT NULL,
+			password_encrypted TEXT NOT NULL,
+			folder TEXT NOT NULL DEFAULT 'INBOX',
+			polling_interval_minutes INTEGER NOT NULL DEFAULT 2,
+			last_test_status TEXT,
+			last_error TEXT,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER
+		)`,
+    "ALTER TABLE imap_settings ADD COLUMN profile_id TEXT",
     "ALTER TABLE domains ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE domains ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE domains ADD COLUMN receive_imap_enabled INTEGER NOT NULL DEFAULT 0",
@@ -279,8 +326,15 @@ adminRoutes.post("/domains", async (c) => {
   const imapEnabled = !!b.receive_imap_enabled;
   const routingEnabled = !!b.receive_routing_enabled;
   const imap = b.imap || {};
-  if (imapEnabled && (!imap.host || !imap.username || !imap.password))
-    return c.json({ error: "IMAP host/username/password wajib" }, 400);
+  let imapFields: any = null;
+  if (imapEnabled) {
+    imapFields = await resolveImapFields(c.env, imap);
+    if (!imapFields)
+      return c.json(
+        { error: "IMAP profile atau host/username/password wajib" },
+        400,
+      );
+  }
   const id = uid("dom");
   await c.env.DB.prepare(
     `INSERT INTO domains (id, domain, source, status, verified, is_verified, is_enabled, receive_imap_enabled, receive_routing_enabled, routing_status, created_at, updated_at)
@@ -297,21 +351,22 @@ adminRoutes.post("/domains", async (c) => {
       now(),
     )
     .run();
-  if (imapEnabled) {
+  if (imapEnabled && imapFields) {
     await c.env.DB.prepare(
-      `INSERT INTO imap_settings (id, domain_id, host, port, encryption, username, password_encrypted, folder, polling_interval_minutes, enabled, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      `INSERT INTO imap_settings (id, domain_id, profile_id, host, port, encryption, username, password_encrypted, folder, polling_interval_minutes, enabled, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     )
       .bind(
         uid("imap"),
         id,
-        imap.host,
-        Number(imap.port || 993),
-        imap.encryption || "ssl",
-        imap.username,
-        imap.password,
-        imap.folder || "INBOX",
-        pollingMinutes(imap.polling_interval_minutes),
+        imapFields.profile_id,
+        imapFields.host,
+        imapFields.port,
+        imapFields.encryption,
+        imapFields.username,
+        imapFields.password,
+        imapFields.folder,
+        imapFields.polling_interval_minutes,
         now(),
         now(),
       )
@@ -390,8 +445,51 @@ adminRoutes.patch("/domains/:id", async (c) => {
     )
       .bind(id)
       .first<any>();
-    if (existing) {
-      const f: string[] = ["updated_at = ?"];
+    if (imap.profile_id) {
+      const fields = await resolveImapFields(c.env, imap);
+      if (!fields) return c.json({ error: "profile tidak ditemukan" }, 400);
+      if (existing) {
+        await c.env.DB.prepare(
+          `UPDATE imap_settings SET profile_id = ?, host = ?, port = ?, encryption = ?, username = ?, password_encrypted = ?, folder = ?, polling_interval_minutes = ?, enabled = ?, updated_at = ? WHERE id = ?`,
+        )
+          .bind(
+            fields.profile_id,
+            fields.host,
+            fields.port,
+            fields.encryption,
+            fields.username,
+            fields.password,
+            fields.folder,
+            fields.polling_interval_minutes,
+            boolNum(imapEnabled),
+            now(),
+            existing.id,
+          )
+          .run();
+      } else {
+        await c.env.DB.prepare(
+          `INSERT INTO imap_settings (id, domain_id, profile_id, host, port, encryption, username, password_encrypted, folder, polling_interval_minutes, enabled, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+          .bind(
+            uid("imap"),
+            id,
+            fields.profile_id,
+            fields.host,
+            fields.port,
+            fields.encryption,
+            fields.username,
+            fields.password,
+            fields.folder,
+            fields.polling_interval_minutes,
+            boolNum(imapEnabled),
+            now(),
+            now(),
+          )
+          .run();
+      }
+    } else if (existing) {
+      const f: string[] = ["updated_at = ?", "profile_id = NULL"];
       const v: any[] = [now()];
       for (const [apiKey, dbKey] of [
         ["host", "host"],
@@ -557,6 +655,204 @@ adminRoutes.post("/imap-accounts/:id/test", async (c) =>
 adminRoutes.post("/imap-accounts/:id/sync", async (c) =>
   c.json({ error: "IMAP sekarang dikonfigurasi di dalam domain" }, 410),
 );
+
+// ---------- IMAP PROFILES (reusable) ----------
+adminRoutes.get("/imap-profiles", async (c) => {
+  await ensureMailSourceSchema(c.env);
+  const { results } = await c.env.DB.prepare(
+    `SELECT p.*, COUNT(s.id) AS used_by
+		 FROM imap_profiles p
+		 LEFT JOIN imap_settings s ON s.profile_id = p.id
+		 GROUP BY p.id ORDER BY p.created_at DESC`,
+  )
+    .all<any>()
+    .catch(() => ({ results: [] as any[] }));
+  const profiles: any[] = [];
+  for (const p of results ?? []) {
+    const { results: doms } = await c.env.DB.prepare(
+      `SELECT d.domain FROM imap_settings s JOIN domains d ON d.id = s.domain_id WHERE s.profile_id = ? ORDER BY d.domain`,
+    )
+      .bind(p.id)
+      .all<any>()
+      .catch(() => ({ results: [] as any[] }));
+    profiles.push({
+      id: p.id,
+      name: p.name,
+      host: p.host,
+      port: p.port,
+      encryption: p.encryption,
+      username: p.username,
+      folder: p.folder,
+      polling_interval_minutes: p.polling_interval_minutes,
+      last_test_status: p.last_test_status,
+      last_error: p.last_error,
+      used_by: Number(p.used_by || 0),
+      domains: (doms ?? []).map((d: any) => d.domain),
+    });
+  }
+  return c.json({ profiles });
+});
+
+adminRoutes.post("/imap-profiles", async (c) => {
+  await ensureMailSourceSchema(c.env);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const imap = b.imap || b;
+  const name = (b.name || imap.name || "").trim();
+  if (!name) return c.json({ error: "nama profile wajib" }, 400);
+  if (!imap.host || !imap.username || !imap.password)
+    return c.json({ error: "IMAP host/username/password wajib" }, 400);
+  const id = uid("imp");
+  await c.env.DB.prepare(
+    `INSERT INTO imap_profiles (id, name, host, port, encryption, username, password_encrypted, folder, polling_interval_minutes, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      id,
+      name,
+      imap.host,
+      Number(imap.port || 993),
+      imap.encryption || "ssl",
+      imap.username,
+      imap.password,
+      imap.folder || "INBOX",
+      pollingMinutes(imap.polling_interval_minutes),
+      now(),
+      now(),
+    )
+    .run();
+  await addLog(c.env, "info", "imap", "imap profile dibuat: " + name);
+  return c.json({ ok: true, id });
+});
+
+adminRoutes.patch("/imap-profiles/:id", async (c) => {
+  await ensureMailSourceSchema(c.env);
+  const id = c.req.param("id");
+  const b = await c.req.json<any>().catch(() => ({}));
+  const imap = b.imap || b;
+  const cur = await c.env.DB.prepare("SELECT * FROM imap_profiles WHERE id = ?")
+    .bind(id)
+    .first<any>();
+  if (!cur) return c.json({ error: "not found" }, 404);
+  const f: string[] = ["updated_at = ?"];
+  const v: any[] = [now()];
+  if (b.name !== undefined && String(b.name).trim()) {
+    f.push("name = ?");
+    v.push(String(b.name).trim());
+  }
+  for (const [apiKey, dbKey] of [
+    ["host", "host"],
+    ["port", "port"],
+    ["encryption", "encryption"],
+    ["username", "username"],
+    ["password", "password_encrypted"],
+    ["folder", "folder"],
+    ["polling_interval_minutes", "polling_interval_minutes"],
+  ] as any) {
+    if (imap[apiKey] !== undefined && imap[apiKey] !== "") {
+      f.push(dbKey + " = ?");
+      v.push(
+        apiKey === "polling_interval_minutes"
+          ? pollingMinutes(imap[apiKey])
+          : apiKey === "port"
+            ? Number(imap[apiKey] || 993)
+            : imap[apiKey],
+      );
+    }
+  }
+  v.push(id);
+  await c.env.DB.prepare(
+    "UPDATE imap_profiles SET " + f.join(", ") + " WHERE id = ?",
+  )
+    .bind(...v)
+    .run();
+  // propagate ke semua imap_settings yang terhubung (state sync per-domain dipertahankan)
+  const prof = await c.env.DB.prepare(
+    "SELECT * FROM imap_profiles WHERE id = ?",
+  )
+    .bind(id)
+    .first<any>();
+  await c.env.DB.prepare(
+    `UPDATE imap_settings SET host = ?, port = ?, encryption = ?, username = ?, password_encrypted = ?, folder = ?, polling_interval_minutes = ?, updated_at = ? WHERE profile_id = ?`,
+  )
+    .bind(
+      prof.host,
+      prof.port,
+      prof.encryption,
+      prof.username,
+      prof.password_encrypted,
+      prof.folder,
+      prof.polling_interval_minutes,
+      now(),
+      id,
+    )
+    .run();
+  await addLog(c.env, "info", "imap", "imap profile diperbarui: " + prof.name);
+  return c.json({ ok: true });
+});
+
+adminRoutes.delete("/imap-profiles/:id", async (c) => {
+  await ensureMailSourceSchema(c.env);
+  const id = c.req.param("id");
+  const used = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM imap_settings WHERE profile_id = ?",
+  )
+    .bind(id)
+    .first<{ n: number }>();
+  if ((used?.n ?? 0) > 0)
+    return c.json(
+      {
+        error:
+          "Cannot delete profile. This profile is currently linked to " +
+          used!.n +
+          " domains. Remove all linked domains first.",
+        used_by: used!.n,
+      },
+      409,
+    );
+  await c.env.DB.prepare("DELETE FROM imap_profiles WHERE id = ?")
+    .bind(id)
+    .run();
+  await addLog(c.env, "info", "imap", "imap profile dihapus");
+  return c.json({ ok: true });
+});
+
+adminRoutes.post("/imap-profiles/:id/test", async (c) => {
+  await ensureMailSourceSchema(c.env);
+  const id = c.req.param("id");
+  const row = await c.env.DB.prepare("SELECT * FROM imap_profiles WHERE id = ?")
+    .bind(id)
+    .first<any>();
+  if (!row) return c.json({ error: "not found" }, 404);
+  const res = await testConnection(imapForTest(row));
+  await c.env.DB.prepare(
+    "UPDATE imap_profiles SET last_test_status = ?, last_error = ?, updated_at = ? WHERE id = ?",
+  )
+    .bind(
+      res.ok ? "success" : "failed",
+      res.ok ? null : res.error || "connection failed",
+      now(),
+      id,
+    )
+    .run()
+    .catch(() => {});
+  return c.json(res);
+});
+
+// Smart detection: cari profile yang identik (host + username) dengan custom config
+adminRoutes.post("/imap-profiles/check", async (c) => {
+  await ensureMailSourceSchema(c.env);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const imap = b.imap || b;
+  const host = (imap.host || "").trim().toLowerCase();
+  const username = (imap.username || "").trim().toLowerCase();
+  if (!host || !username) return c.json({ match: null });
+  const row = await c.env.DB.prepare(
+    "SELECT id, name, host, username FROM imap_profiles WHERE LOWER(host) = ? AND LOWER(username) = ? LIMIT 1",
+  )
+    .bind(host, username)
+    .first<any>();
+  return c.json({ match: row || null });
+});
 
 // ---------- ADMINS ----------
 adminRoutes.get("/admins", async (c) => {
