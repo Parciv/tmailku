@@ -60,10 +60,29 @@ CREATE TABLE IF NOT EXISTS attachments (
   r2_key TEXT
 );
 
+-- Profile IMAP yang bisa dipakai ulang oleh banyak domain (reusable)
+CREATE TABLE IF NOT EXISTS imap_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  host TEXT NOT NULL,
+  port INTEGER NOT NULL DEFAULT 993,
+  encryption TEXT NOT NULL DEFAULT 'ssl',     -- 'ssl' | 'starttls' | 'none'
+  username TEXT NOT NULL,
+  password_encrypted TEXT NOT NULL,           -- plaintext sementara; gunakan App Password
+  folder TEXT NOT NULL DEFAULT 'INBOX',
+  polling_interval_minutes INTEGER NOT NULL DEFAULT 2,
+  last_test_status TEXT,
+  last_error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER
+);
+
 -- Konfigurasi IMAP per-domain (domain-centric)
+-- profile_id != NULL artinya domain ini memakai reusable profile (field koneksi disinkron dari profile).
 CREATE TABLE IF NOT EXISTS imap_settings (
   id TEXT PRIMARY KEY,
   domain_id TEXT UNIQUE REFERENCES domains(id),
+  profile_id TEXT REFERENCES imap_profiles(id),
   host TEXT NOT NULL,
   port INTEGER NOT NULL DEFAULT 993,
   encryption TEXT NOT NULL DEFAULT 'ssl',    -- 'ssl' | 'starttls' | 'none'

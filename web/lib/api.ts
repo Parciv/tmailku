@@ -121,6 +121,32 @@ export const api = {
     ),
   syncDomainImap: (id: string) =>
     req<any>("/api/admin/domains/" + id + "/imap/sync", { method: "POST" }),
+  // IMAP Profiles (reusable)
+  imapProfiles: () => req<{ profiles: any[] }>("/api/admin/imap-profiles"),
+  addImapProfile: (b: { name: string; imap: any }) =>
+    req<{ ok: boolean; id: string }>("/api/admin/imap-profiles", {
+      method: "POST",
+      body: JSON.stringify(b),
+    }),
+  patchImapProfile: (id: string, b: { name?: string; imap?: any }) =>
+    req<{ ok: boolean }>("/api/admin/imap-profiles/" + id, {
+      method: "PATCH",
+      body: JSON.stringify(b),
+    }),
+  delImapProfile: (id: string) =>
+    req<{ ok: boolean }>("/api/admin/imap-profiles/" + id, {
+      method: "DELETE",
+    }),
+  testImapProfile: (id: string) =>
+    req<{ ok: boolean; error?: string }>(
+      "/api/admin/imap-profiles/" + id + "/test",
+      { method: "POST" },
+    ),
+  checkImapProfile: (imap: any) =>
+    req<{ match: any | null }>("/api/admin/imap-profiles/check", {
+      method: "POST",
+      body: JSON.stringify({ imap }),
+    }),
   admins: () => req<{ admins: any[] }>("/api/admin/admins"),
   addAdmin: (b: any) =>
     req<any>("/api/admin/admins", { method: "POST", body: JSON.stringify(b) }),
