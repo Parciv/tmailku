@@ -68,8 +68,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  inbox: (addr: string) =>
-    req<{ emails: EmailSummary[] }>("/api/inbox/" + encodeURIComponent(addr)),
+  inbox: (addr: string, sync = false) =>
+    req<{ emails: EmailSummary[] }>(
+      "/api/inbox/" + encodeURIComponent(addr) + (sync ? "?sync=1" : ""),
+    ),
   email: (id: string) => req<any>("/api/email/" + id),
   deleteEmail: (id: string) =>
     req<{ ok: boolean }>("/api/email/" + id, { method: "DELETE" }),

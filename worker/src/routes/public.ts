@@ -5,6 +5,7 @@ import { uid, now, randomLocalPart } from "../lib/util";
 import { getAllSettings } from "../lib/settings";
 import { rateLimit } from "../lib/ratelimit";
 import { addLog } from "../lib/log";
+import { pollAccount } from "../imap/fetcher";
 
 export const publicRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -79,6 +80,30 @@ publicRoutes.get("/domains", async (c) => {
   return c.json({ domains: (results ?? []).map((r) => r.domain) });
 });
 
+async function syncImapForAddress(env: Env, addr: string) {
+  const row = await env.DB.prepare(
+    `SELECT a.address, d.domain, i.*
+     FROM addresses a
+     JOIN domains d ON d.id = a.domain_id
+     JOIN imap_settings i ON i.domain_id = d.id
+     WHERE a.address = ?
+       AND i.enabled = 1
+       AND COALESCE(d.receive_imap_enabled, 0) = 1
+       AND COALESCE(d.is_enabled, CASE WHEN d.status = 'disabled' THEN 0 ELSE 1 END) = 1
+     LIMIT 1`,
+  )
+    .bind(addr)
+    .first<any>();
+  if (!row) return;
+  await pollAccount(env, {
+    ...row,
+    hostname: row.host,
+    password: row.password_encrypted,
+    poll_interval: (row.polling_interval_minutes || 2) * 60,
+    force: true,
+  });
+}
+
 // serve aset branding (logo/favicon) dari R2
 publicRoutes.get("/asset/:id", async (c) => {
   const obj = await c.env.R2.get("brand/" + c.req.param("id"));
@@ -125,7 +150,13 @@ export async function listInbox(env: Env, addr: string) {
 }
 
 publicRoutes.get("/inbox/:addr", async (c) => {
-  const rows = await listInbox(c.env, c.req.param("addr").toLowerCase());
+  const addr = c.req.param("addr").toLowerCase();
+  if (c.req.query("sync") === "1") {
+    await syncImapForAddress(c.env, addr).catch(async (e) => {
+      await addLog(c.env, "warn", "imap", "manual refresh gagal " + addr + ": " + (e?.message || e));
+    });
+  }
+  const rows = await listInbox(c.env, addr);
   if (rows === null) return c.json({ error: "not found" }, 404);
   return c.json({ emails: rows });
 });
