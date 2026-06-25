@@ -904,6 +904,25 @@ html, body {
   outline-offset: 2px;
 }
 
+/* Theme toggle button */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-dim);
+  transition: background 0.15s, color 0.15s;
+}
+.theme-toggle:hover {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
 /* Responsive */
 @media (max-width: 480px) {
   .pg-badges { display: none; }
