@@ -68,8 +68,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  inbox: (addr: string) =>
-    req<{ emails: EmailSummary[] }>("/api/inbox/" + encodeURIComponent(addr)),
+  inbox: (addr: string, sync = false) =>
+    req<{ emails: EmailSummary[] }>(
+      "/api/inbox/" + encodeURIComponent(addr) + (sync ? "?sync=1" : ""),
+    ),
   email: (id: string) => req<any>("/api/email/" + id),
   deleteEmail: (id: string) =>
     req<{ ok: boolean }>("/api/email/" + id, { method: "DELETE" }),
@@ -96,8 +98,19 @@ export const api = {
   stats: () => req<any>("/api/admin/stats"),
   activity: () => req<{ events: any[] }>("/api/admin/activity"),
   adminDomains: () => req<{ domains: any[] }>("/api/admin/domains"),
-  addDomain: (b: any) =>
-    req<any>("/api/admin/domains", { method: "POST", body: JSON.stringify(b) }),
+  addDomain: async (b: any) => {
+    const created = await req<any>("/api/admin/domains", {
+      method: "POST",
+      body: JSON.stringify(b),
+    });
+    if (b?.receive_imap_enabled && created?.id) {
+      await req<any>("/api/admin/domains/" + created.id, {
+        method: "PATCH",
+        body: JSON.stringify({ verified: true, is_verified: true }),
+      }).catch(() => {});
+    }
+    return created;
+  },
   patchDomain: (id: string, b: any) =>
     req<any>("/api/admin/domains/" + id, {
       method: "PATCH",
@@ -114,11 +127,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ imap }),
     }),
-  testDomainImap: (id: string, imap?: any) =>
-    req<{ ok: boolean; error?: string }>(
+  testDomainImap: async (id: string, imap?: any) => {
+    const result = await req<{ ok: boolean; error?: string }>(
       "/api/admin/domains/" + id + "/imap/test",
       { method: "POST", body: JSON.stringify(imap ? { imap } : {}) },
-    ),
+    );
+    if (result.ok) {
+      await req<any>("/api/admin/domains/" + id, {
+        method: "PATCH",
+        body: JSON.stringify({ verified: true, is_verified: true }),
+      }).catch(() => {});
+    }
+    return result;
+  },
   syncDomainImap: (id: string) =>
     req<any>("/api/admin/domains/" + id + "/imap/sync", { method: "POST" }),
   // IMAP Profiles (reusable)

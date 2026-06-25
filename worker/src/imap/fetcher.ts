@@ -53,15 +53,16 @@ export async function pollAccount(env: Env, acc: any): Promise<number> {
   try {
     await client.login();
     await client.selectFolder();
-    const uids = await client.searchSince(acc.last_uid || 0);
+    const sinceUid = acc.force ? Math.max(0, Number(acc.last_uid || 0) - 50) : Number(acc.last_uid || 0);
+    const uids = await client.searchSince(sinceUid);
     let maxUid = acc.last_uid || 0;
     for (const uid of uids.slice(0, 25)) {
       const raw = await client.fetchMessage(uid);
       if (raw) {
-        const parsed = await parseRaw(raw);
+        const parsed = await parseRaw(raw, acc.domain);
         if (parsed) {
-          await storeEmail(env, "imap", parsed);
-          count++;
+          const stored = await storeEmail(env, "imap", parsed);
+          if (stored) count++;
         }
       }
       if (uid > maxUid) maxUid = uid;
@@ -84,10 +85,11 @@ export async function pollAccount(env: Env, acc: any): Promise<number> {
   return count;
 }
 
-async function parseRaw(raw: Uint8Array): Promise<ParsedEmail | null> {
+async function parseRaw(raw: Uint8Array, domain?: string): Promise<ParsedEmail | null> {
   try {
     const email = await PostalMime.parse(raw);
-    const to = email.to?.[0]?.address || "";
+    const rawText = new TextDecoder().decode(raw);
+    const to = pickRecipient(email, rawText, domain);
     if (!to) return null;
     return {
       messageId: email.messageId,
@@ -107,4 +109,39 @@ async function parseRaw(raw: Uint8Array): Promise<ParsedEmail | null> {
   } catch {
     return null;
   }
+}
+
+function pickRecipient(email: any, rawText: string, domain?: string): string {
+  const candidates = new Set<string>();
+  const add = (v?: string) => {
+    const s = String(v || "").trim().toLowerCase();
+    const m = s.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+    if (m) candidates.add(m[0].toLowerCase());
+  };
+
+  for (const r of email.to || []) add(r.address);
+  for (const r of email.cc || []) add(r.address);
+  for (const r of email.bcc || []) add(r.address);
+
+  for (const header of [
+    "delivered-to",
+    "x-original-to",
+    "x-envelope-to",
+    "envelope-to",
+    "apparently-to",
+    "original-recipient",
+    "to",
+    "cc",
+  ]) {
+    const re = new RegExp("^" + header + ":\\s*(.+)$", "gim");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(rawText))) add(m[1]);
+  }
+
+  const wanted = String(domain || "").toLowerCase();
+  if (wanted) {
+    const match = [...candidates].find((addr) => addr.endsWith("@" + wanted));
+    if (match) return match;
+  }
+  return [...candidates][0] || "";
 }

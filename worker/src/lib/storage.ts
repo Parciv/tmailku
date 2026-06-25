@@ -79,6 +79,15 @@ export async function storeEmail(
     return null;
   }
 
+  if (p.messageId) {
+    const existing = await env.DB.prepare(
+      "SELECT id FROM emails WHERE address_id = ? AND message_id = ? LIMIT 1",
+    )
+      .bind(address.id, p.messageId)
+      .first<{ id: string }>();
+    if (existing?.id) return null;
+  }
+
   const emailId = uid("em");
   const otp = detectOtp(p.subject || "", p.text || stripHtml(p.html || ""));
   const maxBytes =
