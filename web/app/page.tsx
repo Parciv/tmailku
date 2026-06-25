@@ -115,9 +115,9 @@ export default function Home() {
 	const activeLabel = active || (loading ? 'Membuat alamat...' : 'Belum ada alamat')
 
 	return (
-		<main className="max-w-5xl mx-auto px-4 py-6">
+		<main className="mx-auto w-full max-w-[1120px] px-[clamp(1rem,3vw,2rem)] py-[clamp(1rem,2.5vw,1.75rem)]">
 			<BrandingProvider onLoad={setBranding} />
-			<header className="flex items-center justify-between mb-8">
+			<header className="flex items-center justify-between mb-[clamp(1.5rem,4vw,2.75rem)]">
 				<div className="flex items-center gap-2 font-bold text-lg">
 					{branding?.logoUrl ? <img src={branding.logoUrl} alt="" className="h-7 w-7 object-contain" /> : <Zap className="text-primary" />} {branding?.appName || 'TMailku'}
 				</div>
@@ -127,8 +127,8 @@ export default function Home() {
 				</div>
 			</header>
 
-			<section className="text-center mb-8">
-				<h1 className="text-3xl sm:text-4xl font-extrabold mb-3">{branding?.heroTitle || 'Email Sementara, Instan & Privat'}</h1>
+			<section className="text-center mb-[clamp(1.5rem,4vw,2.5rem)]">
+				<h1 className="text-[clamp(2rem,4.2vw,3.25rem)] leading-tight font-extrabold mb-3">{branding?.heroTitle || 'Email Sementara, Instan & Privat'}</h1>
 				<p className="opacity-70 mb-4">{branding?.heroSubtitle || 'Terima email tanpa registrasi. Auto-hapus otomatis.'}</p>
 				<div className="flex gap-2 justify-center flex-wrap">
 					<span className="pill"><ShieldCheck size={14} /> Private</span>
@@ -137,18 +137,18 @@ export default function Home() {
 				</div>
 			</section>
 
-			<div className="glass p-4 sm:p-5 mb-6 overflow-visible">
-				<div className="flex items-start justify-between gap-3 flex-wrap lg:flex-nowrap">
-					<div className="relative min-w-0 flex-1 w-full">
+			<div className="glass p-[clamp(1rem,2.4vw,1.5rem)] mb-[clamp(1rem,2.5vw,1.5rem)] overflow-visible">
+				<div className="flex items-start justify-center gap-[clamp(0.9rem,2vw,1.35rem)] flex-wrap xl:flex-nowrap">
+					<div className="relative min-w-0 flex-1 w-full max-w-[760px]">
 						{customMode ? (
-							<div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+							<div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-[clamp(0.85rem,2vw,1.15rem)]">
 								<div className="flex items-center justify-between mb-2">
 									<div className="text-sm font-semibold opacity-80">Buat email custom</div>
 									<button className="opacity-70 hover:opacity-100" onClick={() => setCustomMode(false)}><X size={16} /></button>
 								</div>
 								<div className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
 									<input
-										className="min-w-0 flex-1 mono text-sm sm:text-base"
+										className="min-w-0 flex-1 mono text-[clamp(1rem,2.2vw,1.35rem)]"
 										placeholder="namaku"
 										value={customLocal}
 										onChange={(e) => setCustomLocal(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
@@ -168,48 +168,48 @@ export default function Home() {
 							</div>
 						) : (
 							<>
-								<button className="btn btn-ghost mono text-sm sm:text-lg md:text-xl font-semibold w-full justify-between min-w-0" onClick={() => setShowSwitcher((s) => !s)} disabled={!active && loading}>
+								<button className="btn btn-ghost mono w-full justify-between min-w-0 min-h-[clamp(3.75rem,8vw,5.25rem)] px-[clamp(1rem,2.4vw,1.5rem)] text-[clamp(1.3rem,3.2vw,2.55rem)] leading-none font-extrabold" onClick={() => setShowSwitcher((s) => !s)} disabled={!active && loading}>
 									<span className="truncate block min-w-0">{activeLabel}</span> <ChevronDown size={18} className="shrink-0" />
 								</button>
 								{showSwitcher && (
-									<div className="popover absolute z-50 mt-1 p-2 w-full max-h-52 overflow-y-auto">
-										{addresses.map((a) => (
-											<div key={a.address} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-black/10 dark:hover:bg-white/10">
-												<button className="mono text-xs sm:text-sm text-left flex-1 truncate" onClick={() => { setActive(a.address); setActiveAddr(a.address); setShowSwitcher(false); setEmails([]) }}>{a.address}</button>
-												<button className="shrink-0 opacity-70 hover:opacity-100" onClick={() => { removeAddress(a.address); setAddresses(getAddresses()); setActiveAddr(getActive()) }}><Trash2 size={14} /></button>
+									<div className="popover mt-3 p-2 w-full max-h-[min(16rem,34vh)] overflow-y-auto">
+										{addresses.length === 0 ? (
+											<div className="px-3 py-2 text-sm opacity-60">Belum ada email tersimpan</div>
+										) : addresses.map((a) => (
+											<div key={a.address} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl hover:bg-black/10 dark:hover:bg-white/10">
+												<button className="mono text-[clamp(0.9rem,1.6vw,1.05rem)] text-left flex-1 truncate" onClick={() => { setActive(a.address); setActiveAddr(a.address); setShowSwitcher(false); setEmails([]) }}>{a.address}</button>
+												<button className="shrink-0 opacity-70 hover:opacity-100" onClick={() => { removeAddress(a.address); setAddresses(getAddresses()); setActiveAddr(getActive()) }} aria-label="Hapus email tersimpan"><Trash2 size={16} /></button>
 											</div>
 										))}
-										<button className="btn btn-ghost w-full mt-2" onClick={() => generate()}><Plus size={14} /> Alamat acak</button>
-										<button className="btn btn-ghost w-full mt-1" onClick={() => { setShowSwitcher(false); setCustomMode(true) }}><Pencil size={14} /> Custom email</button>
 									</div>
 								)}
 							</>
 						)}
 					</div>
 
-					<div className="grid grid-cols-2 gap-2 w-full sm:w-auto shrink-0">
-						<button className="btn btn-primary justify-center" onClick={copy} disabled={!active}>{copied ? <Check size={16} /> : <Copy size={16} />} Copy</button>
-						<button className="btn btn-ghost justify-center" onClick={() => refresh(active, true)} disabled={!active || refreshing}><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? '...' : 'Refresh'}</button>
-						<button className="btn btn-ghost justify-center" onClick={() => { setShowSwitcher(false); setCustomMode((s) => !s) }}><Pencil size={16} /> Custom</button>
-						<button className="btn btn-ghost justify-center" onClick={removeCurrent} disabled={!active}><Trash2 size={16} /> Hapus</button>
+					<div className="grid grid-cols-2 gap-[clamp(0.65rem,1.4vw,0.9rem)] w-full sm:w-auto sm:min-w-[300px] xl:min-w-[330px] shrink-0">
+						<button className="btn btn-primary justify-center min-h-[clamp(3rem,5vw,3.65rem)] px-[clamp(0.9rem,2vw,1.2rem)] text-[clamp(0.95rem,1.35vw,1.08rem)]" onClick={copy} disabled={!active}>{copied ? <Check size={16} /> : <Copy size={16} />} Copy</button>
+						<button className="btn btn-ghost justify-center min-h-[clamp(3rem,5vw,3.65rem)] px-[clamp(0.9rem,2vw,1.2rem)] text-[clamp(0.95rem,1.35vw,1.08rem)]" onClick={() => refresh(active, true)} disabled={!active || refreshing}><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? '...' : 'Refresh'}</button>
+						<button className="btn btn-ghost justify-center min-h-[clamp(3rem,5vw,3.65rem)] px-[clamp(0.9rem,2vw,1.2rem)] text-[clamp(0.95rem,1.35vw,1.08rem)]" onClick={() => { setShowSwitcher(false); setCustomMode((s) => !s) }}><Pencil size={16} /> Custom</button>
+						<button className="btn btn-ghost justify-center min-h-[clamp(3rem,5vw,3.65rem)] px-[clamp(0.9rem,2vw,1.2rem)] text-[clamp(0.95rem,1.35vw,1.08rem)]" onClick={removeCurrent} disabled={!active}><Trash2 size={16} /> Hapus</button>
 					</div>
 				</div>
 			</div>
 
-			<div className="glass p-5">
+			<div className="glass p-[clamp(1rem,2.4vw,1.5rem)] min-h-[clamp(360px,50vh,640px)]">
 				<div className="flex items-center justify-between mb-4">
 					<div className="flex items-center gap-2 font-semibold"><Mail size={18} /> Kotak Masuk <span className="pill">{emails.length}</span></div>
 					<span className="pill"><span className="live-dot w-2 h-2 rounded-full bg-secondary inline-block" /> Live</span>
 				</div>
 				{emails.length === 0 ? (
-					<div className="text-center opacity-60 py-12"><Mail size={40} className="mx-auto mb-2" /> Kotak masuk kosong</div>
+					<div className="text-center opacity-60 min-h-[clamp(260px,38vh,500px)] flex flex-col items-center justify-center"><Mail size={44} className="mx-auto mb-3" /> Kotak masuk kosong</div>
 				) : (
-					<div className="space-y-2">
+					<div className="space-y-2 max-h-[clamp(300px,44vh,560px)] overflow-y-auto pr-1">
 						{emails.map((e) => (
 							<button key={e.id} onClick={() => openEmail(e.id)} className="glass w-full text-left p-3 flex items-center justify-between gap-3">
 								<div className="min-w-0 flex-1">
-									<div className="font-medium truncate text-sm sm:text-base">{e.from_name || e.from_addr}</div>
-									<div className="text-xs sm:text-sm opacity-70 truncate">{e.subject || '(tanpa subjek)'}</div>
+									<div className="font-medium truncate text-[clamp(0.95rem,1.6vw,1.08rem)]">{e.from_name || e.from_addr}</div>
+									<div className="text-[clamp(0.82rem,1.25vw,0.95rem)] opacity-70 truncate">{e.subject || '(tanpa subjek)'}</div>
 								</div>
 								{e.otp_code && <span className="pill text-tertiary shrink-0" onClick={(ev) => { ev.stopPropagation(); navigator.clipboard.writeText(e.otp_code!) }}>OTP {e.otp_code}</span>}
 							</button>
