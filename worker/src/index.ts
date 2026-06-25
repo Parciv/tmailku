@@ -13,6 +13,7 @@ import { storeEmail, type ParsedEmail } from "./lib/storage";
 import { pollAllImap } from "./imap/fetcher";
 import { cleanupExpired } from "./lib/cleanup";
 import { addLog } from "./lib/log";
+import { ensureSchema } from "./lib/autoSchema";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -32,6 +33,14 @@ app.use("*", async (c, next) => {
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   })(c, next);
+});
+
+app.use("*", async (c, next) => {
+  const path = c.req.path;
+  if (path.startsWith("/api") || path === "/inbound") {
+    await ensureSchema(c.env);
+  }
+  await next();
 });
 
 app.get("/", (c) => c.json({ service: "tmailku", ok: true }));
@@ -100,6 +109,7 @@ export default {
     ctx: ExecutionContext,
   ) {
     try {
+      await ensureSchema(env);
       const rawBuf = new Response(message.raw);
       const raw = new Uint8Array(await rawBuf.arrayBuffer());
       const parsed = await PostalMime.parse(raw);
@@ -138,6 +148,7 @@ export default {
   ) {
     ctx.waitUntil(
       (async () => {
+        await ensureSchema(env);
         await pollAllImap(env).catch((e) =>
           addLog(env, "error", "cron", "imap poll: " + e),
         );
