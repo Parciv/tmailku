@@ -12,5 +12,10 @@
     "dev:web": "npm --workspace web run dev",
     "deploy:worker": "npm --workspace worker run deploy"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "lucide-react": "^1.21.0",
+    "next": "^16.2.9",
+    "react": "^19.2.7"
+  }
 }
