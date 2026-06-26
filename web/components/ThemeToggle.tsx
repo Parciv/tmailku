@@ -16,7 +16,7 @@ export default function ThemeToggle() {
 		setTheme(next)
 	}
 	return (
-		<button className="theme-toggle" onClick={toggle} aria-label="Toggle theme">
+		<button className="btn btn-ghost" onClick={toggle} aria-label="Toggle theme">
 			{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
 		</button>
 	)
